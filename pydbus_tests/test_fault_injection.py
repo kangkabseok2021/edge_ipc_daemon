@@ -37,19 +37,15 @@ def test_spike_csv_triggers_fault(daemon_factory, spike_csv):
 
 
 def test_alarm_raised_signal_emitted(daemon_factory, spike_csv):
-    from pydbus import SystemBus
     from gi.repository import GLib
 
-    bus = SystemBus()
     alarms = []
 
     def on_alarm(sensor_id, value, threshold):
         alarms.append((sensor_id, value, threshold))
 
-    proxy = bus.get("org.agntx.EdgeDaemon", "/org/agntx/EdgeDaemon")
+    proxy = daemon_factory({"TELEMETRY_PATH": spike_csv})
     proxy.AlarmRaised.connect(on_alarm)
-
-    daemon_factory({"TELEMETRY_PATH": spike_csv})
     proxy.Start()
 
     loop = GLib.MainLoop()

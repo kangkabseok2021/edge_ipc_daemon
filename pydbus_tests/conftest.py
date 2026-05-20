@@ -32,6 +32,8 @@ def daemon_factory():
     procs = []
 
     def make_daemon(env_overrides=None):
+        if not os.path.exists(DAEMON_BIN):
+            pytest.xfail(f"daemon binary not found: {DAEMON_BIN}")
         env = os.environ.copy()
         if env_overrides:
             env.update(env_overrides)
