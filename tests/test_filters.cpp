@@ -20,3 +20,40 @@ TEST(MovingAverageFilter, ResetClearsState) {
     f.reset();
     EXPECT_NEAR(f.apply(10.0), 10.0, 0.1);
 }
+
+#include "ThresholdDetector.h"
+#include "DataProcessor.h"
+#include "TelemetryFrame.h"
+#include <chrono>
+
+TEST(ThresholdDetector, KConsecutiveTriggersAlarm) {
+    ThresholdDetector d(80.0, 20.0, 3);
+    d.apply(90.0); EXPECT_FALSE(d.alarm());
+    d.apply(90.0); EXPECT_FALSE(d.alarm());
+    d.apply(90.0); EXPECT_TRUE(d.alarm());
+}
+
+TEST(ThresholdDetector, SingleSpikeDoesNotLatch) {
+    ThresholdDetector d(80.0, 20.0, 3);
+    d.apply(90.0);
+    d.apply(50.0);  // resets consecutive count
+    d.apply(90.0);
+    EXPECT_FALSE(d.alarm());
+}
+
+TEST(DataProcessor, AlarmFlagSetAfterKConsecutive) {
+    DataProcessor proc(5, 80.0, 20.0, 3);
+    auto now = std::chrono::steady_clock::now();
+    ProcessedMetric m;
+    for (int i = 0; i < 3; ++i) m = proc.process({"s1", 90.0, now});
+    EXPECT_TRUE(m.alarm_flag);
+}
+
+TEST(DataProcessor, FilteredValueConverges) {
+    DataProcessor proc(5, 80.0, 20.0, 3);
+    auto now = std::chrono::steady_clock::now();
+    ProcessedMetric m;
+    for (int i = 0; i < 5; ++i) m = proc.process({"s1", 60.0, now});
+    EXPECT_NEAR(m.filtered_value, 60.0, 0.1);
+    EXPECT_EQ(m.sensor_id, "s1");
+}
