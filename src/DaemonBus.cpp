@@ -42,7 +42,8 @@ struct DaemonBus::Impl {
     sd_bus_slot* slot{nullptr};
     std::weak_ptr<StateManager> sm_weak;
     std::atomic<bool>     running{false};
-    std::jthread          worker;
+    std::atomic<bool>     worker_stop{false};
+    std::thread           worker;
     std::atomic<uint64_t> processed_count{0};
     std::chrono::steady_clock::time_point start_time;
 };
@@ -125,8 +126,9 @@ bool DaemonBus::start() {
     if (r < 0) return false;
 
     impl_->running = true;
-    impl_->worker = std::jthread([this](std::stop_token st) {
-        while (!st.stop_requested()) {
+    impl_->worker_stop.store(false, std::memory_order_relaxed);
+    impl_->worker = std::thread([this]() {
+        while (!impl_->worker_stop.load(std::memory_order_relaxed)) {
             int rc = sd_bus_process(impl_->bus, nullptr);
             if (rc > 0) continue;
             sd_bus_wait(impl_->bus, 10'000 /* µs = 10ms */);
@@ -137,7 +139,7 @@ bool DaemonBus::start() {
 
 void DaemonBus::stop() {
     if (!impl_->running.exchange(false)) return;
-    impl_->worker.request_stop();
+    impl_->worker_stop.store(true, std::memory_order_relaxed);
     impl_->worker.join();  // wait for thread to exit before clearing bus/slot
     if (impl_->slot) { sd_bus_slot_unref(impl_->slot); impl_->slot = nullptr; }
     if (impl_->bus)  { sd_bus_unref(impl_->bus);       impl_->bus  = nullptr; }
