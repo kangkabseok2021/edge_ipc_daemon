@@ -138,6 +138,7 @@ bool DaemonBus::start() {
 void DaemonBus::stop() {
     if (!impl_->running.exchange(false)) return;
     impl_->worker.request_stop();
+    impl_->worker.join();  // wait for thread to exit before clearing bus/slot
     if (impl_->slot) { sd_bus_slot_unref(impl_->slot); impl_->slot = nullptr; }
     if (impl_->bus)  { sd_bus_unref(impl_->bus);       impl_->bus  = nullptr; }
 }
