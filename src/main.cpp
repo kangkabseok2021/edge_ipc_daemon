@@ -82,9 +82,11 @@ int main() {
     }
 
     sd_notify(0, "STOPPING=1");
-    sm->shutdown();
     producer_stop.store(true);
     producer.join();
+    sm->shutdown();
+    sm->setStateChangedCallback(nullptr);
+    sm->setAlarmCallback(nullptr);
     bus->stop();
     return 0;
 }
