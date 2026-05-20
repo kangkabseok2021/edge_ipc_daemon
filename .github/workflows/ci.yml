@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── C++ x86 — GoogleTest with real libsystemd ─────────────────────────────
+  cpp-x86:
+    name: C++ x86 (GoogleTest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install libsystemd-dev
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libsystemd-dev
+
+      - name: Configure
+        run: |
+          cmake -B build -S . \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSTUB_DBUS=OFF \
+            -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -V
+
+  # ── C++ ASan — AddressSanitizer + UBSan ───────────────────────────────────
+  cpp-asan:
+    name: C++ ASan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install libsystemd-dev
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libsystemd-dev
+
+      - name: Configure with ASan
+        run: |
+          cmake -B build-asan -S . \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DSTUB_DBUS=OFF \
+            -DENABLE_ASAN=ON \
+            -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
+
+      - name: Build
+        run: cmake --build build-asan -j$(nproc)
+
+      - name: Test under ASan
+        run: ctest --test-dir build-asan --output-on-failure -V
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+
+  # ── C++ ARM64 cross-compile check ─────────────────────────────────────────
+  cpp-arm64:
+    name: C++ ARM64 cross-compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ARM64 cross-compiler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Cross-compile (STUB_DBUS=ON, no tests)
+        run: |
+          cmake -B build-arm64 -S . \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-arm64.cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSTUB_DBUS=ON \
+            -DBUILD_TESTS=OFF \
+            -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
+          cmake --build build-arm64 --target edge_ipc_daemon -j$(nproc)
+
+  # ── Python pydbus (xfail on CI, no system bus) ────────────────────────────
+  python:
+    name: Python pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run pytest (pydbus tests xfail without system bus)
+        run: uv run pytest pydbus_tests/ -v --tb=short
