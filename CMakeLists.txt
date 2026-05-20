@@ -8,6 +8,8 @@ option(BUILD_TESTS  "Build GoogleTest suite"                 ON)
 option(STUB_DBUS    "No-op DaemonBus stub (no libsystemd)"  OFF)
 option(ENABLE_ASAN  "AddressSanitizer + UBSan"              OFF)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 if(ENABLE_ASAN)
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
     add_link_options(-fsanitize=address,undefined)
