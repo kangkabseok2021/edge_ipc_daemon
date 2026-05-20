@@ -1,0 +1,10 @@
+build/
+build-*/
+*.o
+*.a
+*.asc
+edge_ipc_daemon
+__pycache__/
+.pytest_cache/
+*.pyc
+.venv/
