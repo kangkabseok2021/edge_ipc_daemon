@@ -1,0 +1,23 @@
+[Unit]
+Description=Secure Edge IPC Daemon
+After=dbus.service
+Requires=dbus.service
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/edge_ipc_daemon
+Restart=on-failure
+RestartSec=3s
+StartLimitBurst=5
+StartLimitIntervalSec=60s
+WatchdogSec=10s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+DynamicUser=true
+ProtectKernelTunables=true
+RestrictNamespaces=true
+
+[Install]
+WantedBy=multi-user.target
