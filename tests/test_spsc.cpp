@@ -19,6 +19,7 @@ TEST(SPSC, OverflowIncrementsDropped) {
     size_t pushed = 0;
     while (rx.push(f)) ++pushed;
     EXPECT_EQ(pushed, TelemetryReceiver::CAPACITY - 1);
-    EXPECT_FALSE(rx.push(f));
-    EXPECT_EQ(rx.dropped(), 1u);
+    EXPECT_EQ(rx.dropped(), 1u);  // while loop's first failed push
+    EXPECT_FALSE(rx.push(f));     // second overflow
+    EXPECT_EQ(rx.dropped(), 2u);  // both counted
 }
