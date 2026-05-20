@@ -12,12 +12,21 @@ void StateManager::setAlarmCallback(AlarmCb cb) {
 }
 
 void StateManager::start() {
-    DaemonState cur = state_.load(std::memory_order_acquire);
-    if (cur == DaemonState::RUNNING)
-        throw std::logic_error("start() called from RUNNING state");
-    if (cur == DaemonState::SHUTDOWN)
-        throw std::logic_error("start() called from SHUTDOWN state");
-    transition(DaemonState::RUNNING);
+    DaemonState prev = state_.load(std::memory_order_acquire);
+    while (true) {
+        if (prev == DaemonState::RUNNING)
+            throw std::logic_error("start() called from RUNNING state");
+        if (prev == DaemonState::SHUTDOWN)
+            throw std::logic_error("start() called from SHUTDOWN state");
+        if (state_.compare_exchange_weak(prev, DaemonState::RUNNING,
+                                         std::memory_order_acq_rel,
+                                         std::memory_order_acquire))
+            break;
+        // prev updated to current value by compare_exchange_weak — retry
+    }
+    StateChangedCb cb;
+    { std::lock_guard<std::mutex> lk(cb_mu_); cb = state_changed_cb_; }
+    if (cb) cb(DaemonState::RUNNING, prev);
 }
 
 void StateManager::halt() {
@@ -26,11 +35,18 @@ void StateManager::halt() {
 }
 
 void StateManager::fault(const std::string& sensor_id, double value, double threshold) {
-    if (state_.load(std::memory_order_acquire) != DaemonState::RUNNING) return;
-    transition(DaemonState::FAULT);
-    AlarmCb cb;
-    { std::lock_guard<std::mutex> lk(cb_mu_); cb = alarm_cb_; }
-    if (cb) cb(sensor_id, value, threshold);
+    DaemonState expected = DaemonState::RUNNING;
+    if (!state_.compare_exchange_strong(expected, DaemonState::FAULT,
+                                        std::memory_order_acq_rel,
+                                        std::memory_order_acquire)) {
+        return;
+    }
+    StateChangedCb scb;
+    { std::lock_guard<std::mutex> lk(cb_mu_); scb = state_changed_cb_; }
+    if (scb) scb(DaemonState::FAULT, DaemonState::RUNNING);
+    AlarmCb acb;
+    { std::lock_guard<std::mutex> lk(cb_mu_); acb = alarm_cb_; }
+    if (acb) acb(sensor_id, value, threshold);
 }
 
 void StateManager::shutdown() {
