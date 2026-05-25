@@ -1,0 +1,48 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB:       telemetry
+      POSTGRES_USER:     ats_writer
+      POSTGRES_PASSWORD: ats_pass
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ../postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ats_writer -d telemetry"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5433:5432"
+
+  token-issuer:
+    build:
+      context: ../token_issuer
+      dockerfile: ../docker/Dockerfile.token_issuer
+    environment:
+      JWT_SECRET: "${JWT_SECRET:-dev_secret_change_in_prod}"
+    ports:
+      - "8000:8000"
+
+  telemetry-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    environment:
+      SERVER_PORT:   "8443"
+      DATABASE_URL:  "postgresql://ats_writer:ats_pass@postgres:5432/telemetry"
+      JWT_SECRET:    "${JWT_SECRET:-dev_secret_change_in_prod}"
+      TLS_CERT_PATH: "/app/certs/server.crt"
+      TLS_KEY_PATH:  "/app/certs/server.key"
+    volumes:
+      - ../certs:/app/certs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8443:8443"
+
+volumes:
+  pg-data:
