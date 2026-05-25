@@ -3,6 +3,8 @@
 A C++17 Linux daemon demonstrating production-quality embedded software patterns:
 D-Bus IPC via `sd-bus`, four-state FSM, signal filtering (moving average + threshold), systemd `Type=notify` lifecycle, and a formal AddressSanitizer defect analysis.
 
+The `secure_distributed_node/` subfolder extends this project with a gRPC distribution layer — mutual TLS, a 3-node docker-compose cluster, and a Python integration test suite.
+
 ---
 
 ## Architecture
@@ -25,6 +27,18 @@ DaemonBus (org.agntx.EdgeDaemon1 on system bus)
         ▼
 main()  sd_notify READY / WATCHDOG / STOPPING
 ```
+
+### Secure Distributed Node (extension)
+
+```
+coordinator ──mTLS gRPC──▶ worker1:50051 (TelemetryNode + above pipeline)
+            ──mTLS gRPC──▶ worker2:50051 (TelemetryNode + above pipeline)
+                │
+                ▼
+         GET /health → {worker1: {fsm_state, last_value, reachable}, all_running}
+```
+
+See [`secure_distributed_node/docs/DISTRIBUTION-DESIGN.md`](secure_distributed_node/docs/DISTRIBUTION-DESIGN.md) for the full design.
 
 ---
 
@@ -65,6 +79,18 @@ cmake --build build-asan -j$(nproc)
 ASAN_OPTIONS=detect_leaks=0 ctest --test-dir build-asan -V
 ```
 
+### Secure Distributed Node (gRPC, requires libgrpc++-dev)
+
+```bash
+# macOS: brew install grpc
+# Linux: sudo apt-get install libgrpc++-dev libprotobuf-dev protobuf-compiler-grpc libssl-dev
+cmake -B build/sdn -S secure_distributed_node -DCMAKE_BUILD_TYPE=Release -DSTUB_DBUS=ON
+cmake --build build/sdn --target telemetry_node telemetry_coordinator sdn_tests -j$(nproc)
+ctest --test-dir build/sdn --output-on-failure -V   # 8 C++ tests
+bash secure_distributed_node/certs/gen_certs.sh
+uv run pytest secure_distributed_node/tests/test_python/ -v   # 5 Python tests
+```
+
 ---
 
 ## Tests
@@ -83,6 +109,13 @@ uv run pytest pydbus_tests/ -v
 ```
 
 On CI and macOS (no system bus), all pydbus tests are auto-marked `xfail`.
+
+### Secure Distributed Node: 8 C++ + 5 Python gRPC tests
+
+```bash
+ctest --test-dir build/sdn --output-on-failure -V
+uv run pytest secure_distributed_node/tests/test_python/ -v
+```
 
 ---
 

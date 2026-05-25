@@ -53,7 +53,7 @@ if(BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
-option(BUILD_DISTRIBUTED "Build secure_distributed_node subfolder" ON)
+option(BUILD_DISTRIBUTED "Build secure_distributed_node subfolder" OFF)
 if(BUILD_DISTRIBUTED)
     add_subdirectory(secure_distributed_node)
 endif()
