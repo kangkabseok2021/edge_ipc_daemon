@@ -50,6 +50,7 @@ target_compile_definitions(telemetry_proto PUBLIC STUB_DBUS)
 # ── telemetry_node executable ─────────────────────────────────────────────────
 add_executable(telemetry_node
     src/TelemetryNode.cpp
+    src/TlsCredentials.cpp
     src/main_node.cpp
 )
 target_include_directories(telemetry_node PRIVATE
@@ -68,7 +69,9 @@ target_compile_definitions(telemetry_node PRIVATE STUB_DBUS)
 # ── sdn_tests executable ──────────────────────────────────────────────────────
 add_executable(sdn_tests
     src/TelemetryNode.cpp
+    src/TlsCredentials.cpp
     tests/test_telemetry_node.cpp
+    tests/test_tls_credentials.cpp
 )
 target_include_directories(sdn_tests PRIVATE
     include
@@ -87,7 +90,10 @@ target_link_libraries(sdn_tests PRIVATE
     "${SDN_GTEST_LIB}"
     pthread
 )
-target_compile_definitions(sdn_tests PRIVATE STUB_DBUS)
+target_compile_definitions(sdn_tests PRIVATE
+    STUB_DBUS
+    TEST_CERTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/test_certs"
+)
 
 include(GoogleTest)
 # gtest_discover_tests requires the GTest CMake target to correctly install

@@ -8,3 +8,5 @@ __pycache__/
 .pytest_cache/
 *.pyc
 .venv/
+secure_distributed_node/certs/*.key
+secure_distributed_node/tests/test_certs/*.key
