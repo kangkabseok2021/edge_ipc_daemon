@@ -1,0 +1,155 @@
+name: Async Telemetry Server CI
+
+on:
+  push:
+    paths:
+      - "async_telemetry_server/**"
+      - ".github/workflows/async-telemetry-ci.yml"
+  pull_request:
+    paths:
+      - "async_telemetry_server/**"
+
+jobs:
+  build:
+    name: Build & Test (Release)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build git \
+            libboost-dev \
+            libssl-dev libpqxx-dev libpq-dev \
+            pkg-config
+
+      - name: Configure & build
+        working-directory: async_telemetry_server
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTS=ON
+          cmake --build build -j"$(nproc)"
+
+      - name: Run tests
+        working-directory: async_telemetry_server/build
+        run: ctest --output-on-failure
+
+  asan:
+    name: AddressSanitizer + UBSan
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build git \
+            libboost-dev \
+            libssl-dev libpqxx-dev libpq-dev \
+            pkg-config
+
+      - name: Build with ASan
+        working-directory: async_telemetry_server
+        run: |
+          cmake -B build-asan -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DENABLE_ASAN=ON \
+            -DBUILD_TESTS=ON
+          cmake --build build-asan -j"$(nproc)"
+
+      - name: Run tests under ASan
+        working-directory: async_telemetry_server/build-asan
+        run: ctest --output-on-failure
+
+  clang-tidy:
+    name: Clang-Tidy
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build git \
+            libboost-dev \
+            libssl-dev libpqxx-dev libpq-dev \
+            pkg-config clang-tidy-15
+
+      - name: Configure (generate compile_commands.json)
+        working-directory: async_telemetry_server
+        run: |
+          cmake -B build-tidy -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DBUILD_TESTS=OFF
+
+      - name: Run clang-tidy
+        working-directory: async_telemetry_server
+        run: |
+          clang-tidy-15 -p build-tidy \
+            src/FrameProtocol.cpp \
+            src/JwtValidator.cpp \
+            src/TcpServer.cpp \
+            src/TlsServer.cpp
+
+  python-tests:
+    name: pytest — DB integration
+    runs-on: ubuntu-22.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB:       testdb
+          POSTGRES_USER:     testuser
+          POSTGRES_PASSWORD: testpass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python deps
+        run: |
+          pip install pytest pytest-postgresql psycopg2-binary
+
+      - name: Run pytest
+        working-directory: async_telemetry_server/tests/python
+        env:
+          PGHOST:     localhost
+          PGUSER:     testuser
+          PGPASSWORD: testpass
+          PGDATABASE: testdb
+        run: pytest -v
+
+  docker-build:
+    name: Docker build & smoke test
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate TLS certs
+        working-directory: async_telemetry_server
+        run: |
+          chmod +x scripts/gen_certs.sh
+          ./scripts/gen_certs.sh certs
+
+      - name: Build Docker image
+        working-directory: async_telemetry_server
+        run: docker build -f docker/Dockerfile -t ats:ci .
+
+      - name: Validate docker-compose config
+        working-directory: async_telemetry_server/docker
+        run: docker compose -f docker-compose.yml config --quiet
