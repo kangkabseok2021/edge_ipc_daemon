@@ -26,7 +26,7 @@ private:
     int                                                              next_{0};
     std::string                                                      conn_str_;
 
-    void ensure_open(pqxx::connection*& c);
+    void ensure_open(std::unique_ptr<pqxx::connection>& ptr);
 };
 
 } // namespace ats
