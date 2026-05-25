@@ -19,8 +19,30 @@ if(NOT TARGET edge_ipc_core)
     target_compile_definitions(edge_ipc_core PUBLIC STUB_DBUS)
 endif()
 
-find_package(gRPC CONFIG REQUIRED)
-find_package(Protobuf REQUIRED)
+# Try CMake config first (macOS Homebrew); fall back to pkg-config (Ubuntu apt)
+find_package(gRPC CONFIG QUIET)
+if(gRPC_FOUND)
+    find_package(Protobuf REQUIRED)
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GRPC     REQUIRED IMPORTED_TARGET grpc++)
+    pkg_check_modules(PROTOBUF REQUIRED IMPORTED_TARGET protobuf)
+    find_program(GRPC_CPP_PLUGIN grpc_cpp_plugin REQUIRED)
+    # Expose canonical target aliases consumed by the rest of this file
+    if(NOT TARGET gRPC::grpc++)
+        add_library(gRPC::grpc++ INTERFACE IMPORTED)
+        target_link_libraries(gRPC::grpc++ INTERFACE PkgConfig::GRPC)
+    endif()
+    if(NOT TARGET protobuf::libprotobuf)
+        add_library(protobuf::libprotobuf INTERFACE IMPORTED)
+        target_link_libraries(protobuf::libprotobuf INTERFACE PkgConfig::PROTOBUF)
+    endif()
+    # Expose protoc via find_package so Protobuf_PROTOC_EXECUTABLE is set
+    find_package(Protobuf QUIET)
+    if(NOT Protobuf_PROTOC_EXECUTABLE)
+        find_program(Protobuf_PROTOC_EXECUTABLE protoc REQUIRED)
+    endif()
+endif()
 
 # GTest/GMock detection:
 # On macOS with Homebrew gRPC, the gRPC package transitively exposes GTest
@@ -41,7 +63,12 @@ else()
 endif()
 
 # Locate protoc and grpc_cpp_plugin
-get_target_property(GRPC_CPP_PLUGIN gRPC::grpc_cpp_plugin LOCATION)
+if(TARGET gRPC::grpc_cpp_plugin)
+    get_target_property(GRPC_CPP_PLUGIN gRPC::grpc_cpp_plugin LOCATION)
+endif()
+if(NOT GRPC_CPP_PLUGIN)
+    find_program(GRPC_CPP_PLUGIN grpc_cpp_plugin REQUIRED)
+endif()
 set(PROTO_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/proto")
 set(PROTO_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 
