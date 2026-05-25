@@ -22,15 +22,23 @@ endif()
 find_package(gRPC CONFIG REQUIRED)
 find_package(Protobuf REQUIRED)
 
-# gRPC (from Homebrew) transitively exposes GTest 1.17.0 headers via
-# /opt/homebrew/include, which are ABI-incompatible with the fetched
-# GTest 1.14.0 that CMake's GTest::* targets point to on this machine.
-# Detect the mismatch and use Homebrew GTest directly so headers + libs match.
-set(SDN_GTEST_INCLUDE "/opt/homebrew/include")
-set(SDN_GTEST_LIB     "/opt/homebrew/lib/libgtest.a")
-set(SDN_GTEST_MAIN    "/opt/homebrew/lib/libgtest_main.a")
-set(SDN_GMOCK_LIB     "/opt/homebrew/lib/libgmock.a")
-set(SDN_GMOCK_MAIN    "/opt/homebrew/lib/libgmock_main.a")
+# GTest/GMock detection:
+# On macOS with Homebrew gRPC, the gRPC package transitively exposes GTest
+# headers from /opt/homebrew/include that are ABI-incompatible with
+# FetchContent-fetched GTest 1.14.0.  Use the Homebrew GTest directly so
+# headers and libs match.  On Linux (CI) use find_package which finds the
+# system-installed libgtest-dev package.
+if(APPLE AND EXISTS "/opt/homebrew/lib/libgtest.a")
+    set(SDN_GTEST_INCLUDE "/opt/homebrew/include")
+    set(SDN_GTEST_LIB     "/opt/homebrew/lib/libgtest.a")
+    set(SDN_GTEST_MAIN    "/opt/homebrew/lib/libgtest_main.a")
+    set(SDN_GMOCK_LIB     "/opt/homebrew/lib/libgmock.a")
+    set(SDN_GMOCK_MAIN    "/opt/homebrew/lib/libgmock_main.a")
+    set(SDN_GTEST_USE_HOMEBREW TRUE)
+else()
+    find_package(GTest REQUIRED)
+    set(SDN_GTEST_USE_HOMEBREW FALSE)
+endif()
 
 # Locate protoc and grpc_cpp_plugin
 get_target_property(GRPC_CPP_PLUGIN gRPC::grpc_cpp_plugin LOCATION)
@@ -95,29 +103,41 @@ target_include_directories(sdn_tests PRIVATE
     include
     "${CMAKE_SOURCE_DIR}/include"
     "${PROTO_GEN_DIR}"
-    "${SDN_GTEST_INCLUDE}"   # ensure Homebrew GTest 1.17.0 headers come first
 )
-target_link_libraries(sdn_tests PRIVATE
-    edge_ipc_core
-    telemetry_proto
-    gRPC::grpc++
-    protobuf::libprotobuf
-    "${SDN_GMOCK_MAIN}"
-    "${SDN_GMOCK_LIB}"
-    "${SDN_GTEST_MAIN}"
-    "${SDN_GTEST_LIB}"
-    pthread
-)
+if(SDN_GTEST_USE_HOMEBREW)
+    # Homebrew GTest: prepend header path so it wins over any other GTest headers
+    target_include_directories(sdn_tests BEFORE PRIVATE "${SDN_GTEST_INCLUDE}")
+    target_link_libraries(sdn_tests PRIVATE
+        edge_ipc_core
+        telemetry_proto
+        gRPC::grpc++
+        protobuf::libprotobuf
+        "${SDN_GMOCK_MAIN}"
+        "${SDN_GMOCK_LIB}"
+        "${SDN_GTEST_MAIN}"
+        "${SDN_GTEST_LIB}"
+        pthread
+    )
+else()
+    # System GTest (Linux / CI)
+    target_link_libraries(sdn_tests PRIVATE
+        edge_ipc_core
+        telemetry_proto
+        gRPC::grpc++
+        protobuf::libprotobuf
+        GTest::gmock_main
+        GTest::gmock
+        GTest::gtest_main
+        GTest::gtest
+        pthread
+    )
+endif()
 target_compile_definitions(sdn_tests PRIVATE
     STUB_DBUS
     TEST_CERTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/test_certs"
 )
 
 include(GoogleTest)
-# gtest_discover_tests requires the GTest CMake target to correctly install
-# the post-build discovery script.  Since sdn_tests links raw Homebrew .a
-# files instead of GTest::* targets, we fall back to add_test with the
-# --gtest_output flag which is perfectly understood by ctest.
 add_test(NAME sdn_tests COMMAND sdn_tests)
 set_tests_properties(sdn_tests PROPERTIES TIMEOUT 60)
 
@@ -128,8 +148,11 @@ add_executable(telemetry_coordinator
     src/main_coordinator.cpp)
 target_include_directories(telemetry_coordinator PRIVATE
     include
-    "${CMAKE_CURRENT_BINARY_DIR}"
-    /opt/homebrew/include)   # httplib + nlohmann/json
+    "${CMAKE_CURRENT_BINARY_DIR}")
+# On macOS with Homebrew, add the Homebrew include path for httplib/nlohmann
+if(APPLE AND EXISTS "/opt/homebrew/include")
+    target_include_directories(telemetry_coordinator PRIVATE /opt/homebrew/include)
+endif()
 target_compile_definitions(telemetry_coordinator PRIVATE STUB_DBUS)
 target_link_libraries(telemetry_coordinator PRIVATE
     telemetry_proto
