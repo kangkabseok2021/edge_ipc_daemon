@@ -42,6 +42,8 @@ else()
     if(NOT Protobuf_PROTOC_EXECUTABLE)
         find_program(Protobuf_PROTOC_EXECUTABLE protoc REQUIRED)
     endif()
+    # OpenSSL::SSL / OpenSSL::Crypto are not pulled in transitively via pkg-config
+    find_package(OpenSSL REQUIRED)
 endif()
 
 # GTest/GMock detection:
