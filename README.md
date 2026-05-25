@@ -1,5 +1,7 @@
 # edge_ipc_daemon
 
+![CI](https://github.com/kangkabseok2021/edge_ipc_daemon/actions/workflows/ci.yml/badge.svg)
+
 A C++17 Linux daemon demonstrating production-quality embedded software patterns:
 D-Bus IPC via `sd-bus`, four-state FSM, signal filtering (moving average + threshold), systemd `Type=notify` lifecycle, and a formal AddressSanitizer defect analysis.
 
@@ -83,8 +85,10 @@ ASAN_OPTIONS=detect_leaks=0 ctest --test-dir build-asan -V
 
 ```bash
 # macOS: brew install grpc
-# Linux: sudo apt-get install libgrpc++-dev libprotobuf-dev protobuf-compiler-grpc libssl-dev
-cmake -B build/sdn -S secure_distributed_node -DCMAKE_BUILD_TYPE=Release -DSTUB_DBUS=ON
+# Linux: sudo apt-get install libgrpc++-dev libprotobuf-dev protobuf-compiler-grpc \
+#                             libssl-dev libgtest-dev libgmock-dev
+
+cmake -B build/sdn -S secure_distributed_node -DCMAKE_BUILD_TYPE=Release
 cmake --build build/sdn --target telemetry_node telemetry_coordinator sdn_tests -j$(nproc)
 ctest --test-dir build/sdn --output-on-failure -V   # 8 C++ tests
 bash secure_distributed_node/certs/gen_certs.sh
@@ -113,8 +117,13 @@ On CI and macOS (no system bus), all pydbus tests are auto-marked `xfail`.
 ### Secure Distributed Node: 8 C++ + 5 Python gRPC tests
 
 ```bash
+# C++ unit tests (TelemetryNode + TlsCredentials)
 ctest --test-dir build/sdn --output-on-failure -V
-uv run pytest secure_distributed_node/tests/test_python/ -v
+
+# Python mTLS integration tests (requires telemetry_node binary + certs)
+bash secure_distributed_node/certs/gen_certs.sh
+TELEMETRY_NODE_BIN=build/sdn/telemetry_node \
+  uv run pytest secure_distributed_node/tests/test_python/ -v
 ```
 
 ---
