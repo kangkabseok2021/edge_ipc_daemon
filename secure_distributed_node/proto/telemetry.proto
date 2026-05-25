@@ -1,0 +1,23 @@
+syntax = "proto3";
+package telemetry;
+
+message TelemetrySample {
+    string node_id        = 1;
+    double raw_value      = 2;
+    double filtered_value = 3;
+    bool   alarm_active   = 4;
+    string fsm_state      = 5;
+    int64  timestamp_ms   = 6;
+}
+message TelemetryAck { bool received = 1; string node_id = 2; }
+message NodeStatusRequest { string node_id = 1; }
+message NodeStatus {
+    string  node_id         = 1;
+    string  fsm_state       = 2;
+    uint64  processed_count = 3;
+    double  last_value      = 4;
+}
+service TelemetryService {
+    rpc StreamTelemetry(NodeStatusRequest) returns (stream TelemetrySample);
+    rpc GetNodeStatus(NodeStatusRequest)   returns (NodeStatus);
+}

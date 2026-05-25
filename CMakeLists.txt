@@ -52,3 +52,8 @@ if(BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+option(BUILD_DISTRIBUTED "Build secure_distributed_node subfolder" ON)
+if(BUILD_DISTRIBUTED)
+    add_subdirectory(secure_distributed_node)
+endif()
