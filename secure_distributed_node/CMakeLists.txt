@@ -4,6 +4,8 @@ project(SecureDistributedNode CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(BUILD_TESTS "Build sdn_tests (GoogleTest suite)" ON)
+
 # ── Standalone build: define edge_ipc_core if the parent hasn't done so ───────
 if(NOT TARGET edge_ipc_core)
     add_library(edge_ipc_core STATIC
@@ -44,24 +46,6 @@ else()
     endif()
     # OpenSSL::SSL / OpenSSL::Crypto are not pulled in transitively via pkg-config
     find_package(OpenSSL REQUIRED)
-endif()
-
-# GTest/GMock detection:
-# On macOS with Homebrew gRPC, the gRPC package transitively exposes GTest
-# headers from /opt/homebrew/include that are ABI-incompatible with
-# FetchContent-fetched GTest 1.14.0.  Use the Homebrew GTest directly so
-# headers and libs match.  On Linux (CI) use find_package which finds the
-# system-installed libgtest-dev package.
-if(APPLE AND EXISTS "/opt/homebrew/lib/libgtest.a")
-    set(SDN_GTEST_INCLUDE "/opt/homebrew/include")
-    set(SDN_GTEST_LIB     "/opt/homebrew/lib/libgtest.a")
-    set(SDN_GTEST_MAIN    "/opt/homebrew/lib/libgtest_main.a")
-    set(SDN_GMOCK_LIB     "/opt/homebrew/lib/libgmock.a")
-    set(SDN_GMOCK_MAIN    "/opt/homebrew/lib/libgmock_main.a")
-    set(SDN_GTEST_USE_HOMEBREW TRUE)
-else()
-    find_package(GTest REQUIRED)
-    set(SDN_GTEST_USE_HOMEBREW FALSE)
 endif()
 
 # Locate protoc and grpc_cpp_plugin
@@ -121,6 +105,25 @@ target_link_libraries(telemetry_node PRIVATE
 )
 target_compile_definitions(telemetry_node PRIVATE STUB_DBUS)
 
+if(BUILD_TESTS)
+# GTest/GMock detection:
+# On macOS with Homebrew gRPC, the gRPC package transitively exposes GTest
+# headers from /opt/homebrew/include that are ABI-incompatible with
+# FetchContent-fetched GTest 1.14.0.  Use the Homebrew GTest directly so
+# headers and libs match.  On Linux (CI) use find_package which finds the
+# system-installed libgtest-dev package.
+if(APPLE AND EXISTS "/opt/homebrew/lib/libgtest.a")
+    set(SDN_GTEST_INCLUDE "/opt/homebrew/include")
+    set(SDN_GTEST_LIB     "/opt/homebrew/lib/libgtest.a")
+    set(SDN_GTEST_MAIN    "/opt/homebrew/lib/libgtest_main.a")
+    set(SDN_GMOCK_LIB     "/opt/homebrew/lib/libgmock.a")
+    set(SDN_GMOCK_MAIN    "/opt/homebrew/lib/libgmock_main.a")
+    set(SDN_GTEST_USE_HOMEBREW TRUE)
+else()
+    find_package(GTest REQUIRED)
+    set(SDN_GTEST_USE_HOMEBREW FALSE)
+endif()
+
 # ── sdn_tests executable ──────────────────────────────────────────────────────
 add_executable(sdn_tests
     src/TelemetryNode.cpp
@@ -169,6 +172,7 @@ target_compile_definitions(sdn_tests PRIVATE
 include(GoogleTest)
 add_test(NAME sdn_tests COMMAND sdn_tests)
 set_tests_properties(sdn_tests PROPERTIES TIMEOUT 60)
+endif() # BUILD_TESTS
 
 # ── telemetry_coordinator executable ─────────────────────────────────────────
 add_executable(telemetry_coordinator
