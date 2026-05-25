@@ -16,3 +16,10 @@ packages = ["pydbus_tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["pydbus_tests"]
+pythonpath = ["secure_distributed_node/tests/test_python"]
+
+[dependency-groups]
+dev = [
+    "grpcio>=1.80.0",
+    "grpcio-tools>=1.80.0",
+]

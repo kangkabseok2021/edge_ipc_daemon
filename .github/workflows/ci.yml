@@ -93,3 +93,88 @@ jobs:
 
       - name: Run pytest (pydbus tests xfail without system bus)
         run: uv run pytest pydbus_tests/ -v --tb=short
+
+  # ── SDN: gRPC C++ unit tests ──────────────────────────────────────────────
+  sdn-grpc-tests:
+    name: SDN gRPC C++ tests
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install gRPC + OpenSSL + GTest deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libgrpc++-dev libprotobuf-dev protobuf-compiler-grpc \
+            libssl-dev libsystemd-dev \
+            libgtest-dev libgmock-dev
+
+      - name: Install cpp-httplib + nlohmann-json
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            libcpp-httplib-dev nlohmann-json3-dev || true
+          # Fallback: download httplib.h if package unavailable
+          if [ ! -f /usr/include/httplib.h ] && [ ! -f /usr/local/include/httplib.h ]; then
+            sudo curl -sSL https://raw.githubusercontent.com/yhirose/cpp-httplib/v0.15.3/httplib.h \
+                 -o /usr/local/include/httplib.h
+          fi
+
+      - name: Configure (standalone SDN build)
+        run: |
+          cmake -B build/sdn -S secure_distributed_node \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTS=ON
+
+      - name: Build sdn_tests
+        run: cmake --build build/sdn --target sdn_tests -j$(nproc)
+
+      - name: Run gRPC unit tests
+        run: ctest --test-dir build/sdn --output-on-failure -V
+
+  # ── SDN: Python gRPC integration tests ────────────────────────────────────
+  sdn-python-tests:
+    name: SDN Python gRPC tests
+    runs-on: ubuntu-22.04
+    needs: [sdn-grpc-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install gRPC build deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libgrpc++-dev libprotobuf-dev protobuf-compiler-grpc \
+            libssl-dev libsystemd-dev nlohmann-json3-dev
+
+      - name: Install cpp-httplib
+        run: |
+          sudo apt-get install -y --no-install-recommends libcpp-httplib-dev || true
+          if [ ! -f /usr/include/httplib.h ] && [ ! -f /usr/local/include/httplib.h ]; then
+            sudo curl -sSL https://raw.githubusercontent.com/yhirose/cpp-httplib/v0.15.3/httplib.h \
+                 -o /usr/local/include/httplib.h
+          fi
+
+      - name: Build telemetry_node binary
+        run: |
+          cmake -B build/sdn -S secure_distributed_node \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
+          cmake --build build/sdn --target telemetry_node -j$(nproc)
+
+      - name: Generate certs
+        run: bash secure_distributed_node/certs/gen_certs.sh
+
+      - name: Generate Python proto stubs
+        run: |
+          uv sync --frozen
+          uv run python -m grpc_tools.protoc \
+            -I secure_distributed_node/proto \
+            --python_out=secure_distributed_node/tests/test_python \
+            --grpc_python_out=secure_distributed_node/tests/test_python \
+            secure_distributed_node/proto/telemetry.proto
+
+      - name: Run Python gRPC tests
+        run: |
+          TELEMETRY_NODE_BIN=build/sdn/telemetry_node \
+          uv run pytest secure_distributed_node/tests/test_python/ -v --tb=short
