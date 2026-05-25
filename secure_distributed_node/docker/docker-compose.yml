@@ -1,0 +1,41 @@
+services:
+  coordinator:
+    build:
+      context: ../../
+      dockerfile: secure_distributed_node/docker/Dockerfile
+    command: ["/usr/local/bin/telemetry_coordinator", "/certs", "8080"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./certs:/certs:ro
+    depends_on:
+      worker1:
+        condition: service_started
+      worker2:
+        condition: service_started
+    networks:
+      - telemetry-net
+
+  worker1:
+    build:
+      context: ../../
+      dockerfile: secure_distributed_node/docker/Dockerfile
+    command: ["/usr/local/bin/telemetry_node", "worker1", "50051", "/certs"]
+    volumes:
+      - ./certs:/certs:ro
+    networks:
+      - telemetry-net
+
+  worker2:
+    build:
+      context: ../../
+      dockerfile: secure_distributed_node/docker/Dockerfile
+    command: ["/usr/local/bin/telemetry_node", "worker2", "50051", "/certs"]
+    volumes:
+      - ./certs:/certs:ro
+    networks:
+      - telemetry-net
+
+networks:
+  telemetry-net:
+    driver: bridge
