@@ -16,6 +16,7 @@ public:
               uint16_t port,
               JwtValidator& validator,
               TelemetryRepository& repo);
+    virtual ~TcpServer() = default;
 
     asio::awaitable<void> listen();
 
