@@ -61,16 +61,19 @@ TEST_F(JwtTest, WrongSignatureFails) {
     auto token = make_token("wrong_secret_entirely", ISSUER, "client_x");
     auto res = v.validate(token);
     EXPECT_FALSE(res.ok);
+    EXPECT_FALSE(res.error_detail.empty());
 }
 
 TEST_F(JwtTest, WrongIssuerFails) {
     auto token = make_token(SECRET, "https://evil.issuer.example", "client_x");
     auto res = v.validate(token);
     EXPECT_FALSE(res.ok);
+    EXPECT_FALSE(res.error_detail.empty());
 }
 
 TEST_F(JwtTest, EmptySubjectFails) {
     auto token = make_token(SECRET, ISSUER, "");
     auto res = v.validate(token);
     EXPECT_FALSE(res.ok);
+    EXPECT_FALSE(res.error_detail.empty());
 }
