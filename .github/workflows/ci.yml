@@ -218,7 +218,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu cmake python3
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu cmake make python3
 
       - name: Cross-compile (tests off)
         run: |

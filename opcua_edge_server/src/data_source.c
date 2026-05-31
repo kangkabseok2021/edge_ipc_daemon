@@ -40,3 +40,10 @@ void data_source_init(UA_Server *server) {
         UA_Server_setVariableNode_dataSource(server, nodeId, ds);
     }
 }
+
+float data_source_get(CncNodeIdx idx) {
+    return atomic_load_explicit(&g_node_values[idx], memory_order_relaxed);
+}
+void data_source_set(CncNodeIdx idx, float val) {
+    atomic_store_explicit(&g_node_values[idx], val, memory_order_relaxed);
+}
