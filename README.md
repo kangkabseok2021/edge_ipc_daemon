@@ -1,4 +1,4 @@
-# Edge IPC Daemon, Secure Distributed Node & Async Telemetry Server
+# Edge IPC Daemon, Secure Distributed Node, Async Telemetry Server & OPC UA Edge Server
 
 ![CI](https://github.com/kangkabseok2021/edge_ipc_daemon/actions/workflows/ci.yml/badge.svg)
 ![Async Telemetry CI](https://github.com/kangkabseok2021/edge_ipc_daemon/actions/workflows/async-telemetry-ci.yml/badge.svg)
@@ -97,7 +97,37 @@ edge_ipc_daemon/
 │   ├── scripts/gen_certs.sh         RSA-4096 self-signed TLS cert for localhost
 │   ├── docs/PROTOCOL-SPEC.md        Frame layout, message types, session flow
 │   └── docs/SECURITY.md             ADR-001 through ADR-004
-└── CMakeLists.txt                   Core build; SDN opt-in via -DBUILD_DISTRIBUTED=ON
+├── CMakeLists.txt                   Core build; SDN opt-in via -DBUILD_DISTRIBUTED=ON
+└── opcua_edge_server/
+    ├── src/
+    │   ├── telemetry_params.h           Model constants (A, ω, σ, τ, RPM_BASE, …)
+    │   ├── cnc_node_ids.h               CncNodeId enum (1001–1009) + index mapping
+    │   ├── telemetry_sim.c/h            Box-Muller stochastic model (vibration · temp · torque · axes)
+    │   ├── information_model.c/h        UA_Server: CncMachine object + 9 Float variable nodes
+    │   ├── data_source.c/h              UA_DataSource callbacks — _Atomic float g_node_values[]
+    │   ├── data_source_opt.c            Phase 4 PR: pre-allocated UA_Variant pool (847→42 Ir/cb)
+    │   ├── update_loop.c/h              timerfd 1 kHz · SCHED_FIFO · 9-node update per tick
+    │   └── server_main.c               UA_Server_new → information_model → data_source → run
+    ├── tests/
+    │   ├── test_telemetry_sim.cpp       6 GoogleTests  (Box-Muller mean/std, vibration, temperature)
+    │   ├── test_information_model.cpp   4 GoogleTests  (NodeId enums, AddNodesToServer)
+    │   ├── test_data_source.cpp         5 GoogleTests  (write/read, all indices, UA_Server register)
+    │   ├── test_update_loop.cpp         3 GoogleTests  (start/stop, tick counter, values updated — Linux)
+    │   └── python/test_benchmark.py     5 pytest       (P99 < 3 ms, reference CSV analysis)
+    ├── scripts/
+    │   ├── benchmark_client.py          asyncua multi-client subscriber → latency_log.csv
+    │   ├── generate_report.py           latency CSV → docs/BENCHMARK-REPORT.md
+    │   ├── memcheck.sh                  Valgrind memcheck — expect 0 leaks
+    │   ├── profile_perf.sh              perf record + flamegraph SVG
+    │   └── profile_callgrind.sh         callgrind — Ir count per cnc_read_callback
+    ├── docs/
+    │   ├── ARCHITECTURE.md             Two-thread design · shared _Atomic float · SCHED_FIFO
+    │   ├── INFORMATION-MODEL.md        NodeId table · engineering units · update rate
+    │   ├── THREAD-SAFETY.md            _Atomic float rationale · Helgrind note · acquire/release
+    │   ├── TIMING-ANALYSIS.md          Overrun rate < 0.01% · tick margin > 952 µs
+    │   └── PR-DESCRIPTION.md           open62541-style contribution PR body
+    ├── CMakeLists.txt                  open62541 FetchContent · cnc_core · cnc_server · tests
+    └── pyproject.toml                  asyncua · numpy · pytest-asyncio
 ```
 
 ---
@@ -182,6 +212,38 @@ TOKEN=$(curl -s -X POST http://localhost:8000/token \
   -H 'Content-Type: application/json' \
   -d '{"client_id":"test_client","client_secret":"test_pass"}' | jq -r .access_token)
 ./build/ats/telemetry_client localhost 8443 "$TOKEN"
+```
+
+### OPC UA Edge Server (open62541, no external deps beyond cmake + gcc)
+
+```bash
+# Build + run 15 GoogleTests (open62541 fetched automatically via FetchContent)
+cmake -B opcua_edge_server/build -S opcua_edge_server -DCMAKE_BUILD_TYPE=Release
+cmake --build opcua_edge_server/build -j$(nproc)
+ctest --test-dir opcua_edge_server/build --output-on-failure -V   # 15 pass, 1 skip (timerfd/Linux)
+
+# Python benchmark tests (no running server required)
+cd opcua_edge_server && uv run pytest tests/python/ -v            # 5 pytest
+
+# Run the server (Linux only — requires timerfd + SCHED_FIFO)
+./opcua_edge_server/build/cnc_server   # listens on opc.tcp://0.0.0.0:4840
+
+# ARM64 cross-compile (Raspberry Pi 4 / i.MX 8M Plus)
+sudo apt-get install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+cmake -B opcua_edge_server/build-arm64 -S opcua_edge_server \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-arm64.cmake \
+  -DBUILD_TESTS=OFF
+cmake --build opcua_edge_server/build-arm64 --target cnc_server -j$(nproc)
+
+# Phase 4 — optimised DataSource (pre-allocated UA_Variant pool, 20× Ir reduction)
+cmake -B opcua_edge_server/build-opt -S opcua_edge_server \
+  -DUSE_OPTIMISED_DATASOURCE=ON
+cmake --build opcua_edge_server/build-opt -j$(nproc)
+
+# Latency benchmark (requires running server + asyncua)
+cd opcua_edge_server && python3 scripts/benchmark_client.py \
+  --duration 600 --clients 10 --output data/latency_log.csv
+python3 scripts/generate_report.py data/latency_log.csv
 ```
 
 ---
