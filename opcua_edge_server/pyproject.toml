@@ -1,0 +1,21 @@
+[project]
+name = "opcua-edge-server-tests"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "asyncua>=1.1",
+    "numpy>=1.26",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []   # test-only project — no Python package to install
+
+[tool.pytest.ini_options]
+testpaths    = ["tests/python"]
+asyncio_mode = "auto"

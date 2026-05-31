@@ -11,3 +11,5 @@ __pycache__/
 secure_distributed_node/certs/*.key
 secure_distributed_node/tests/test_certs/*.key
 secure_distributed_node/docker/certs/*.key
+*.egg-info
+.venv

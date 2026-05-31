@@ -3,13 +3,14 @@
 ![CI](https://github.com/kangkabseok2021/edge_ipc_daemon/actions/workflows/ci.yml/badge.svg)
 ![Async Telemetry CI](https://github.com/kangkabseok2021/edge_ipc_daemon/actions/workflows/async-telemetry-ci.yml/badge.svg)
 
-Three C++ systems in one repository — a production-quality Linux daemon, a gRPC extension layer with mutual TLS, and a C++20 coroutine-based async telemetry server.
+Four systems in one repository — a production-quality Linux daemon, a gRPC extension layer with mutual TLS, a C++20 coroutine-based async telemetry server, and a 1 kHz OPC UA edge server.
 
 | Project | Description | Docs |
 |---|---|---|
 | **Edge IPC Daemon** | D-Bus IPC via `sd-bus`, four-state FSM, signal filtering (moving average + threshold), systemd `Type=notify` lifecycle, ARM64 cross-compile, and AddressSanitizer defect analysis | [docs/defect-report-001.md](docs/defect-report-001.md) |
 | **Secure Distributed Node** | gRPC server-streaming `TelemetryService`, mutual TLS (OpenSSL CA), 3-node docker-compose cluster, coordinator REST `/health` endpoint, and a Python mTLS integration test suite | [secure_distributed_node/docs/DISTRIBUTION-DESIGN.md](secure_distributed_node/docs/DISTRIBUTION-DESIGN.md) |
 | **Async Telemetry Server** | Boost.Asio C++20 coroutine TCP server with JWT/TLS 1.3 auth, custom binary frame protocol (CRC-16/CCITT), libpqxx connection pool → PostgreSQL 16, and a Python FastAPI token issuer | [async_telemetry_server/docs/PROTOCOL-SPEC.md](async_telemetry_server/docs/PROTOCOL-SPEC.md) |
+| **OPC UA Edge Server** | open62541 C server, 1 kHz timerfd stochastic CNC telemetry, ARM64 cross-compile, Python asyncua benchmark client, Valgrind callgrind optimisation — simulates an open62541 open-source PR contribution | [opcua_edge_server/docs/ARCHITECTURE.md](opcua_edge_server/docs/ARCHITECTURE.md) |
 
 ---
 
@@ -217,6 +218,9 @@ TOKEN=$(curl -s -X POST http://localhost:8000/token \
 | `ats/clang-tidy` | ubuntu-22.04 | modernize-*, bugprone-*, cert-* |
 | `ats/python-tests` | ubuntu-22.04 | 5 pytest-postgresql DB integration tests |
 | `ats/docker-build` | ubuntu-22.04 | Multi-stage image build + compose validate |
+| `opcua-server-tests` | ubuntu-latest | open62541 FetchContent build + 16 GoogleTests |
+| `opcua-arm64` | ubuntu-latest | AArch64 cross-compile of cnc_server |
+| `opcua-python-tests` | ubuntu-latest | 5 pytest benchmark analysis tests |
 
 ---
 
