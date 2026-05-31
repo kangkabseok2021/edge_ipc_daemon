@@ -224,7 +224,7 @@ jobs:
         run: |
           cmake -B opcua_edge_server/build-arm64 \
                 -S opcua_edge_server \
-                -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-arm64.cmake \
+                -DCMAKE_TOOLCHAIN_FILE="$(pwd)/cmake/toolchain-arm64.cmake" \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DBUILD_TESTS=OFF \
                 -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
