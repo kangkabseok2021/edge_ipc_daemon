@@ -1,16 +1,18 @@
-# Edge IPC Daemon, Secure Distributed Node, Async Telemetry Server & OPC UA Edge Server
+# Edge IPC Daemon, Secure Distributed Node, Async Telemetry Server, OPC UA Edge Server & FPGA Power Electronics HIL
 
 ![CI](https://github.com/kangkabseok2021/edge_ipc_daemon/actions/workflows/ci.yml/badge.svg)
 ![Async Telemetry CI](https://github.com/kangkabseok2021/edge_ipc_daemon/actions/workflows/async-telemetry-ci.yml/badge.svg)
+![FPGA HIL CI](https://github.com/kangkabseok2021/edge_ipc_daemon/actions/workflows/fpga-power-electronics-hil-ci.yml/badge.svg)
 
-Four systems in one repository — a production-quality Linux daemon, a gRPC extension layer with mutual TLS, a C++20 coroutine-based async telemetry server, and a 1 kHz OPC UA edge server.
+Five systems in one repository — a production-quality Linux daemon, a gRPC extension layer with mutual TLS, a C++20 coroutine-based async telemetry server, a 1 kHz OPC UA edge server, and an FPGA-accelerated power electronics HIL simulator.
 
-| Project | Description | Docs |
+| Project | Description | Tests |
 |---|---|---|
-| **Edge IPC Daemon** | D-Bus IPC via `sd-bus`, four-state FSM, signal filtering (moving average + threshold), systemd `Type=notify` lifecycle, ARM64 cross-compile, and AddressSanitizer defect analysis | [docs/defect-report-001.md](docs/defect-report-001.md) |
-| **Secure Distributed Node** | gRPC server-streaming `TelemetryService`, mutual TLS (OpenSSL CA), 3-node docker-compose cluster, coordinator REST `/health` endpoint, and a Python mTLS integration test suite | [secure_distributed_node/docs/DISTRIBUTION-DESIGN.md](secure_distributed_node/docs/DISTRIBUTION-DESIGN.md) |
-| **Async Telemetry Server** | Boost.Asio C++20 coroutine TCP server with JWT/TLS 1.3 auth, custom binary frame protocol (CRC-16/CCITT), libpqxx connection pool → PostgreSQL 16, and a Python FastAPI token issuer | [async_telemetry_server/docs/PROTOCOL-SPEC.md](async_telemetry_server/docs/PROTOCOL-SPEC.md) |
-| **OPC UA Edge Server** | open62541 C server, 1 kHz timerfd stochastic CNC telemetry, ARM64 cross-compile, Python asyncua benchmark client, Valgrind callgrind optimisation — simulates an open62541 open-source PR contribution | [opcua_edge_server/docs/ARCHITECTURE.md](opcua_edge_server/docs/ARCHITECTURE.md) |
+| **Edge IPC Daemon** | D-Bus IPC via `sd-bus`, four-state FSM, signal filtering (moving average + threshold), systemd `Type=notify` lifecycle, ARM64 cross-compile, and AddressSanitizer defect analysis | 20 GoogleTests + 11 pydbus |
+| **Secure Distributed Node** | gRPC server-streaming `TelemetryService`, mutual TLS (OpenSSL CA), 3-node docker-compose cluster, coordinator REST `/health` endpoint, and a Python mTLS integration test suite | 8 GoogleTests + 5 pytest |
+| **Async Telemetry Server** | Boost.Asio C++20 coroutine TCP server with JWT/TLS 1.3 auth, custom binary frame protocol (CRC-16/CCITT), libpqxx connection pool → PostgreSQL 16, and a Python FastAPI token issuer | 14 GoogleTests + 5 pytest |
+| **OPC UA Edge Server** | open62541 C server, 1 kHz timerfd stochastic CNC telemetry, ARM64 cross-compile, Python asyncua benchmark client, Valgrind callgrind optimisation — simulates an open62541 open-source PR contribution | 16 GoogleTests + 5 pytest |
+| **FPGA Power Electronics HIL** | Three-phase VSC trapezoidal DAE solver (EMTP companion circuit), Vitis HLS AXI4-Stream kernel stub, SPWM modulator + discrete PI current controller, FFT/THD waveform analysis | 9 GoogleTests + 5 pytest |
 
 ---
 
@@ -98,6 +100,33 @@ edge_ipc_daemon/
 │   ├── docs/PROTOCOL-SPEC.md        Frame layout, message types, session flow
 │   └── docs/SECURITY.md             ADR-001 through ADR-004
 ├── CMakeLists.txt                   Core build; SDN opt-in via -DBUILD_DISTRIBUTED=ON
+├── fpga_power_electronics_hil/
+│   ├── vsc_solver/
+│   │   ├── include/
+│   │   │   ├── VscNetwork.h         Three-phase VSC + 9-node EMTP network
+│   │   │   ├── NortonUpdate.h       Companion-circuit Norton stamp (inductor + capacitor)
+│   │   │   └── LuSolver.h           In-place LU factorisation + forward/back substitution
+│   │   ├── src/
+│   │   │   ├── VscNetwork.cpp       Conductance matrix assembly, gate-state IGBT stamps
+│   │   │   ├── NortonUpdate.cpp     History-current update per timestep
+│   │   │   └── LuSolver.cpp         9×9 LU; capacitor Norton sign: I_N -= I_Cf_hist
+│   │   ├── tests/test_vsc_solver.cpp 9 GoogleTests (matrix symmetry, step response, THD)
+│   │   └── CMakeLists.txt
+│   ├── hls_solver/
+│   │   ├── include/
+│   │   │   ├── hls_compat.h         ap_fixed / ap_uint → double on host; HLS_PRAGMA noop
+│   │   │   └── solver_types.h       AXI4-Stream types + FixedParams struct
+│   │   ├── norton_update.cpp        HLS Norton stamp — snubbers omitted (τ≈1ns≪dt)
+│   │   ├── lu_solve.cpp             HLS LU forward/back substitution, PIPELINE II=1
+│   │   ├── solver_top.cpp           AXI4-Stream top-level, DATAFLOW pipeline, BRAM state
+│   │   ├── run_hls.tcl              Vitis HLS Tcl — Artix-7 XC7A100T, 5ns clock, csynth
+│   │   └── README.md                HLS synthesis guide + resource estimates
+│   ├── hil/
+│   │   ├── vsc_model.py             Python EMTP VscNetwork — exact match to C++ solver
+│   │   ├── controller.py            Discrete PI current controller + SPWM gate modulator
+│   │   ├── analysis.py              FFT THD, settle_time_steps, power factor
+│   │   └── test_hil_closed_loop.py  5 pytest (PI error, SPWM range, stable loop, THD, step)
+│   └── pyproject.toml               uv — numpy, scipy, pytest; ruff line-length=120
 └── opcua_edge_server/
     ├── src/
     │   ├── telemetry_params.h           Model constants (A, ω, σ, τ, RPM_BASE, …)
@@ -214,6 +243,24 @@ TOKEN=$(curl -s -X POST http://localhost:8000/token \
 ./build/ats/telemetry_client localhost 8443 "$TOKEN"
 ```
 
+### FPGA Power Electronics HIL
+
+```bash
+# C++ vsc_solver — 9 GoogleTests (no external deps beyond CMake + GTest)
+cmake -B build-vsc -S fpga_power_electronics_hil/vsc_solver -DCMAKE_BUILD_TYPE=Release
+cmake --build build-vsc --parallel
+ctest --test-dir build-vsc --output-on-failure -V
+
+# Python HIL — 5 pytest (numpy, scipy)
+cd fpga_power_electronics_hil
+uv sync --frozen
+uv run pytest hil/ -v
+
+# HLS synthesis (requires Xilinx Vitis HLS 2023.x)
+cd fpga_power_electronics_hil/hls_solver
+vitis_hls run_hls.tcl   # targets Artix-7 XC7A100T @ 200 MHz
+```
+
 ### OPC UA Edge Server (open62541, no external deps beyond cmake + gcc)
 
 ```bash
@@ -283,6 +330,9 @@ python3 scripts/generate_report.py data/latency_log.csv
 | `opcua-server-tests` | ubuntu-latest | open62541 FetchContent build + 16 GoogleTests |
 | `opcua-arm64` | ubuntu-latest | AArch64 cross-compile of cnc_server |
 | `opcua-python-tests` | ubuntu-latest | 5 pytest benchmark analysis tests |
+| `fpga-hil/cpp-tests` | ubuntu-latest | cmake + 9 GoogleTests (vsc_solver) |
+| `fpga-hil/hil-tests` | ubuntu-latest | uv + 5 pytest (Python HIL closed-loop) |
+| `fpga-hil/lint` | ubuntu-latest | clang-tidy (C++) + ruff (Python) |
 
 ---
 
