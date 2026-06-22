@@ -50,15 +50,8 @@ void VscNetwork::assemble_and_factor(uint8_t gate) {
     for (int k = 6; k < 9; ++k)
         stamp(G_, k, -1, G_vs);
 
-    // ── IGBT snubber caps (constant, always in circuit) ───────────────────────
-    double G_snub = 2.0 * p_.C_snub / p_.dt;
-    // Upper T1k: inv_k ↔ ground (models switch from DC+ through snubber)
-    // Lower T2k: inv_k ↔ ground
-    // Both snubbers in parallel at inv node k:
-    for (int k = 0; k < 3; ++k)
-        stamp(G_, k, -1, 2.0 * G_snub);  // upper + lower snubber
-
-    // ── IGBT conductances (state-dependent) ───────────────────────────────────
+    // ── IGBT conductances (state-dependent) ──────────────────────────────────
+    // Snubbers (τ≈1ns≪dt=50µs) are in quasi-static limit C→0 → omitted
     // bit 2k   = T1k (upper), bit 2k+1 = T2k (lower), for k=0,1,2
     for (int k = 0; k < 3; ++k) {
         bool T1 = (gate >> (2 * k))     & 1;
@@ -85,15 +78,13 @@ bool VscNetwork::step(State& s, uint8_t gate) {
     // ── Assemble Norton injection vector ─────────────────────────────────────
     double I_N[N]{};
 
-    double G_snub = 2.0 * p_.C_snub / p_.dt;
-
     for (int k = 0; k < 3; ++k) {
         // Inductor Norton: current source flows inv→cap, so -I_hist at inv, +I_hist at cap
         I_N[k]     -= s.I_Lf_hist[k];
         I_N[k + 3] += s.I_Lf_hist[k];
 
-        // Capacitor Norton: source flows ground→cap_k (into cap)
-        I_N[k + 3] += s.I_Cf_hist[k];
+        // Capacitor Norton: companion current flows cap_k→ground (leaves node)
+        I_N[k + 3] -= s.I_Cf_hist[k];
 
         // Grid inductor Norton: current source flows cap→grid
         I_N[k + 3] -= s.I_Lgrid_hist[k];
@@ -105,10 +96,10 @@ bool VscNetwork::step(State& s, uint8_t gate) {
         double v_src = V_grid_peak * std::sin(2.0 * M_PI * p_.f_grid * s.t + phase_offset);
         I_N[k + 6] += (1.0 / p_.R_src) * v_src;
 
-        // Upper switch + snubber inject into inv_k from DC bus; snubbers quasi-static (τ≪dt)
+        // Upper switch injects current from DC bus into inv_k
         bool T1 = (gate >> (2 * k)) & 1;
         double G_T1 = T1 ? p_.G_on : p_.G_off;
-        I_N[k] += (G_T1 + G_snub) * p_.V_dc;
+        I_N[k] += G_T1 * p_.V_dc;
     }
 
     // ── Solve G*V_new = I_N ───────────────────────────────────────────────────
@@ -139,8 +130,6 @@ bool VscNetwork::step(State& s, uint8_t gate) {
         s.i_Lgrid[k]      = n_Lgrid_.G_eq * v_Lgrid_new + s.I_Lgrid_hist[k];
         s.I_Lgrid_hist[k]  = inductor_history(n_Lgrid_, s.i_Lgrid[k], v_Lgrid_new);
 
-        // Snubber τ ≈ 1ns ≪ dt=50µs → quasi-static, no history tracking needed
-        (void)G_snub;
     }
 
     // Update nodal voltages and time
