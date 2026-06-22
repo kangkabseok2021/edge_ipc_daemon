@@ -1,0 +1,84 @@
+name: FPGA Power Electronics HIL — CI
+
+on:
+  push:
+    paths:
+      - "fpga_power_electronics_hil/**"
+      - ".github/workflows/fpga-power-electronics-hil-ci.yml"
+  pull_request:
+    paths:
+      - "fpga_power_electronics_hil/**"
+
+jobs:
+  # ── C++ vsc_solver: 9 GoogleTests ───────────────────────────────────────────
+  cpp-tests:
+    name: C++ vsc_solver — GoogleTests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: |
+          cmake -S fpga_power_electronics_hil/vsc_solver \
+                -B build-vsc \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
+
+      - name: Build
+        run: cmake --build build-vsc --parallel
+
+      - name: Test
+        run: ctest --test-dir build-vsc --output-on-failure -V
+
+  # ── Python HIL: 5 pytest ────────────────────────────────────────────────────
+  hil-tests:
+    name: Python HIL — pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install deps
+        working-directory: fpga_power_electronics_hil
+        run: uv sync --frozen
+
+      - name: Run pytest
+        working-directory: fpga_power_electronics_hil
+        run: uv run pytest hil/ -v --tb=short
+
+  # ── Lint: clang-tidy (C++) + ruff (Python) ──────────────────────────────────
+  lint:
+    name: Lint — clang-tidy + ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-tidy
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang-tidy
+
+      - name: Generate compile_commands.json
+        run: |
+          cmake -S fpga_power_electronics_hil/vsc_solver \
+                -B build-tidy \
+                -DCMAKE_BUILD_TYPE=Debug \
+                -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+                -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
+
+      - name: clang-tidy
+        run: |
+          clang-tidy -p build-tidy \
+            fpga_power_electronics_hil/vsc_solver/src/NortonUpdate.cpp \
+            fpga_power_electronics_hil/vsc_solver/src/VscNetwork.cpp
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install Python deps
+        working-directory: fpga_power_electronics_hil
+        run: uv sync --frozen
+
+      - name: ruff check
+        working-directory: fpga_power_electronics_hil
+        run: uv run ruff check hil/
