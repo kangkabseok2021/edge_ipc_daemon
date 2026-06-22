@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import math
-import numpy as np
-import pytest
 
-from vsc_model import VscNetwork, VscNetworkState, SolverParams
-from controller import PiController, SpwmModulator, make_i_ref
+import numpy as np
 from analysis import compute_thd, settle_time_steps
+from controller import PiController, SpwmModulator, make_i_ref
+from vsc_model import SolverParams, VscNetwork, VscNetworkState
 
 I_RATED = 10.0  # A — rated filter-inductor current amplitude
 

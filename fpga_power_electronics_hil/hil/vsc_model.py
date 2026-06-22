@@ -8,6 +8,7 @@ Node layout (ground = reference):
 from __future__ import annotations
 
 import math
+
 import numpy as np
 
 _TWO_PI = 2.0 * math.pi

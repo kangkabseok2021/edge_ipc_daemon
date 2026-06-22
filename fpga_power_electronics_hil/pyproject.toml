@@ -18,5 +18,8 @@ dev-dependencies = [
 testpaths = ["hil"]
 python_files = ["test_*.py"]
 
+[tool.ruff]
+line-length = 120
+
 [tool.ruff.lint]
 select = ["E", "F", "I"]
